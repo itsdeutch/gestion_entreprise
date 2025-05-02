@@ -1,36 +1,63 @@
 <?php
-session_start(); // Démarrer la session pour gérer les rôles et autorisations.
+session_start();
 
 // Vérification de la connexion et rôle
 if (!isset($_SESSION['username']) || !isset($_SESSION['role'])) {
-    header("Location: login.php"); // Redirection vers la page de connexion si non connecté.
+    header("Location: ../../login.php");
     exit();
 }
 
 include '../../config/database.php';
 
 // Récupérer tous les utilisateurs
-$query = $pdo->query("SELECT * FROM utilisateurs ORDER BY username ASC");
+$query = $pdo->query("SELECT id, username, email, role FROM utilisateurs ORDER BY username ASC");
 $utilisateurs = $query->fetchAll();
 
-// Ajouter un utilisateur via le formulaire
+// Ajouter un utilisateur via le formulaire avec un mot de passe sécurisé
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_utilisateur']) && $_SESSION['role'] === 'admin') {
     $username = $_POST['username'];
     $email = $_POST['email'];
     $role = $_POST['role'];
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT); // Hachage du mot de passe
 
-    $addQuery = $pdo->prepare("INSERT INTO utilisateurs (username, email, role) VALUES (:username, :email, :role)");
-    $addQuery->execute([
-        'username' => $username,
-        'email' => $email,
-        'role' => $role
-    ]);
+    // Vérifier si l'email existe déjà
+    $checkEmail = $pdo->prepare("SELECT COUNT(*) FROM utilisateurs WHERE email = :email");
+    $checkEmail->execute(['email' => $email]);
+    $emailExists = $checkEmail->fetchColumn();
+
+    if ($emailExists > 0) {
+        die("Erreur : Cet email est déjà utilisé !");
+    }
+
+    try {
+        $addQuery = $pdo->prepare("INSERT INTO utilisateurs (username, email, password, role) VALUES (:username, :email, :password, :role)");
+        $addQuery->execute([
+            'username' => $username,
+            'email' => $email,
+            'password' => $password,
+            'role' => $role
+        ]);
+
+        header("Location: index.php");
+        exit();
+    } catch (PDOException $e) {
+        die("Erreur lors de l'ajout de l'utilisateur : " . $e->getMessage());
+    }
+}
+
+// Suppression d'un utilisateur (admin uniquement)
+if (isset($_GET['supprimer']) && $_SESSION['role'] === 'admin') {
+    $id = $_GET['supprimer'];
+    $deleteQuery = $pdo->prepare("DELETE FROM utilisateurs WHERE id = :id");
+    $deleteQuery->execute(['id' => $id]);
 
     header("Location: index.php");
     exit();
 }
 ?>
-<?php include'../../navbar.php'; ?> <!-- Inclure la barre de navigation -->
+
+<?php include '../../navbar.php'; ?> <!-- Inclure la barre de navigation -->
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -45,15 +72,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_utilisateur']
             background: linear-gradient(135deg, #f4f6f9, #ffffff);
         }
 
-        h1 {
+        h1, h3 {
             text-align: center;
             color: #007BFF;
-            margin-bottom: 20px;
-        }
-        h3 {
-            
-            text-align: center;
-            color:rgb(255, 0, 0);
             margin-bottom: 20px;
         }
 
@@ -90,37 +111,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_utilisateur']
             transition: background-color 0.3s ease;
         }
 
-        .actions .edit {
+        .edit {
             background-color: #f0ad4e;
             color: white;
         }
 
-        .actions .edit:hover {
+        .edit:hover {
             background-color: #d99639;
         }
 
-        .actions .delete {
+        .delete {
             background-color: #d9534f;
             color: white;
         }
 
-        .actions .delete:hover {
+        .delete:hover {
             background-color: #c12e2a;
         }
 
         .form-container {
-            margin: 20px 0;
+            margin: 20px auto;
             padding: 20px;
             background: #ffffff;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
+            max-width: 500px;
+            text-align: center;
         }
 
         .form-container input,
         .form-container select {
-            width: calc(33% - 10px);
+            width: calc(100% - 10px);
             padding: 10px;
-            margin-right: 10px;
+            margin-bottom: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
         }
@@ -141,15 +164,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_utilisateur']
     </style>
 </head>
 <body>
-     <h1>PARFUME DE FRANCE</h1>
+    <h1>PARFUME DE FRANCE</h1>
     <h3>Liste des Utilisateurs</h3>
 
-    <?php if ($_SESSION['role'] === 'admin'): // Vérifier si le rôle actuel est admin ?>
+    <?php if ($_SESSION['role'] === 'admin'): ?>
         <div class="form-container">
             <form method="POST">
                 <h3>Ajouter un nouvel utilisateur</h3>
                 <input type="text" name="username" placeholder="Nom d'utilisateur" required>
                 <input type="email" name="email" placeholder="Email" required>
+                <input type="password" name="password" placeholder="Mot de passe" required>
                 <select name="role" required>
                     <option value="admin">Admin</option>
                     <option value="utilisateur">Utilisateur</option>
@@ -174,9 +198,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_utilisateur']
                 <tr>
                     <td><?php echo htmlspecialchars($utilisateur['username']); ?></td>
                     <td><?php echo htmlspecialchars($utilisateur['email']); ?></td>
-                    <td><?php echo ucfirst($utilisateur['role']); ?></td>
+                    <td><?php echo ucfirst(htmlspecialchars($utilisateur['role'])); ?></td>
                     <td class="actions">
-                        <?php if ($_SESSION['role'] === 'admin'): // Vérifier si le rôle actuel est admin ?>
+                        <?php if ($_SESSION['role'] === 'admin'): ?>
                             <button class="edit" onclick="modifierUtilisateur(<?php echo $utilisateur['id']; ?>)">Modifier</button>
                             <button class="delete" onclick="supprimerUtilisateur(<?php echo $utilisateur['id']; ?>)">Supprimer</button>
                         <?php endif; ?>
@@ -193,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_utilisateur']
 
         function supprimerUtilisateur(id) {
             if (confirm("Êtes-vous sûr de vouloir supprimer cet utilisateur ?")) {
-                window.location.href = `supprimer.php?id=${id}`;
+                window.location.href = `index.php?supprimer=${id}`;
             }
         }
     </script>

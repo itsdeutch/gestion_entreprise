@@ -2,26 +2,38 @@
 session_start();
 include 'config/database.php';
 
+// Si l'utilisateur est déjà connecté, rediriger vers le tableau de bord
+if (isset($_SESSION['username'])) {
+    header("Location: dashboard.php");
+    exit();
+}
+
 // Vérification de la connexion
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = $_POST['email'];
-    $password = $_POST['password'];
+    $email = trim($_POST['email']);
+    $password = trim($_POST['password']);
 
-    // Requête pour récupérer l'utilisateur avec l'email
-    $query = $pdo->prepare("SELECT * FROM utilisateurs WHERE email = :email");
-    $query->execute(['email' => $email]);
-    $utilisateur = $query->fetch();
-
-    // Vérification des identifiants
-    if ($utilisateur && password_verify($password, $utilisateur['password'])) {
-        // Stocker les informations utilisateur dans la session
-        $_SESSION['username'] = $utilisateur['username'];
-        $_SESSION['role'] = $utilisateur['role'];
-        $_SESSION['id'] = $utilisateur['id'];
-        header("Location: dashboard.php");
-        exit();
+    // Vérification que les champs ne sont pas vides
+    if (empty($email) || empty($password)) {
+        $erreur = "Tous les champs doivent être remplis.";
     } else {
-        $erreur = "Email ou mot de passe incorrect.";
+        // Requête pour récupérer l'utilisateur avec l'email
+        $query = $pdo->prepare("SELECT * FROM utilisateurs WHERE email = :email");
+        $query->execute(['email' => $email]);
+        $utilisateur = $query->fetch();
+
+        // Vérification des identifiants
+        if ($utilisateur && password_verify($password, $utilisateur['password'])) {
+            session_regenerate_id(true); // Sécurisation de la session
+            $_SESSION['username'] = $utilisateur['username'];
+            $_SESSION['role'] = $utilisateur['role'];
+            $_SESSION['id'] = $utilisateur['id'];
+
+            header("Location: dashboard.php");
+            exit();
+        } else {
+            $erreur = "Email ou mot de passe incorrect.";
+        }
     }
 }
 ?>
@@ -86,8 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
     <div class="login-container">
         <h1>Connexion</h1>
-        <?php if (isset($erreur)): ?>
-            <p class="error-message"><?php echo $erreur; ?></p>
+        <?php if (!empty($erreur)): ?>
+            <p class="error-message"><?php echo htmlspecialchars($erreur); ?></p>
         <?php endif; ?>
         <form method="POST">
             <input type="email" name="email" placeholder="Email" required>

@@ -1,13 +1,24 @@
 <?php
 include '../../config/database.php';
 
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// Vérifier si la colonne `prix` existe dans `ventes`
+$queryCheck = $pdo->query("SHOW COLUMNS FROM ventes LIKE 'prix'");
+$prixColumnExists = $queryCheck->rowCount();
+
+if ($prixColumnExists == 0) {
+    $pdo->query("ALTER TABLE ventes ADD COLUMN prix DECIMAL(10,2) NOT NULL DEFAULT 0");
+}
+
 // Calculer le total des ventes
 $totalQuery = $pdo->query("SELECT SUM(montant) AS total_ventes FROM ventes");
 $totalResult = $totalQuery->fetch();
 $totalVentes = $totalResult['total_ventes'] ?? 0;
 
-// Récupérer toutes les ventes
-$query = $pdo->query("SELECT * FROM ventes ORDER BY nom");
+// Récupérer toutes les ventes avec une requête correcte
+$query = $pdo->query("SELECT id, nom, email, telephone, montant, prix FROM ventes ORDER BY email ASC");
 $ventes = $query->fetchAll();
 
 // Ajouter une nouvelle vente
@@ -16,19 +27,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_ventes'])) {
     $email = $_POST['email'] ?? '';
     $telephone = $_POST['telephone'] ?? '';
     $montant = $_POST['montant'] ?? 0;
+    $produit_id = $_POST['produit_id'] ?? 0;
 
-    $addQuery = $pdo->prepare("INSERT INTO ventes (nom, email, telephone, montant) VALUES (:nom, :email, :telephone, :montant)");
-    $addQuery->execute([
-        'nom' => $nom,
-        'email' => $email,
-        'telephone' => $telephone,
-        'montant' => $montant
-    ]);
+    // Vérifier si le produit existe
+    $checkProduit = $pdo->prepare("SELECT id, prix FROM produits WHERE id = :produit_id");
+    $checkProduit->execute(['produit_id' => $produit_id]);
+    $produit = $checkProduit->fetch();
 
-    header("Location: index.php");
-    exit();
+    if (!$produit) {
+        die("Erreur : Le produit avec l'ID " . htmlspecialchars($produit_id) . " n'existe pas !");
+    }
+
+    try {
+        // Insérer la vente après vérification
+        $addQuery = $pdo->prepare("
+            INSERT INTO ventes (produit_id, nom, email, telephone, montant, prix) 
+            VALUES (:produit_id, :nom, :email, :telephone, :montant, :prix)
+        ");
+        $addQuery->execute([
+            'produit_id' => $produit_id,
+            'nom' => $nom, 
+            'email' => $email, 
+            'telephone' => $telephone, 
+            'montant' => $montant,
+            'prix' => $produit['prix']
+        ]);
+
+        header("Location: index.php");
+        exit();
+    } catch (PDOException $e) {
+        die("Erreur lors de l'ajout de la vente : " . $e->getMessage());
+    }
 }
 ?>
+
+
 <?php include '../../navbar.php'; ?> <!-- Inclure la barre de navigation -->
 <!DOCTYPE html>
 <html lang="fr">
@@ -156,6 +189,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajouter_ventes'])) {
             <input type="text" name="nom" placeholder="Nom de la Vente" required>
             <input type="email" name="email" placeholder="Email" required>
             <input type="text" name="telephone" placeholder="Téléphone" required>
+            <input type="number" name="produit_id" placeholder="ID du produit" required>
+
             <input type="number" step="0.01" name="montant" placeholder="Montant de la Vente" required>
             <button type="submit" name="ajouter_ventes">Ajouter</button>
         </form>

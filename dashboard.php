@@ -1,21 +1,16 @@
 <?php
-include 'config/database.php'; 
+session_start(); // Ajout de la gestion des sessions
+include 'config/database.php';
 
-// Récupérer les totaux
+// Récupérer les totaux avec `fetchColumn()`
 $totalClients = $pdo->query("SELECT COUNT(*) FROM clients")->fetchColumn();
-$totalVentes = $pdo->query("SELECT SUM(quantite) FROM ventes")->fetchColumn() ?: 0;
+$totalVentes = $pdo->query("SELECT SUM(quantite) AS total_ventes FROM ventes")->fetchColumn();
 $totalProduits = $pdo->query("SELECT COUNT(*) FROM produits")->fetchColumn();
 $totalFournisseurs = $pdo->query("SELECT COUNT(*) FROM fournisseurs")->fetchColumn();
 $totalUtilisateurs = $pdo->query("SELECT COUNT(*) FROM utilisateurs")->fetchColumn();
 ?>
+
 <?php include 'navbar.php'; ?>
-<?php
-if (isset($_GET['logout'])) {
-    session_destroy();
-    header("Location: login.php");
-    exit();
-}
-?>
 
 <!DOCTYPE html>
 <html lang="fr">
@@ -76,7 +71,6 @@ if (isset($_GET['logout'])) {
             text-align: center;
             padding: 20px;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
-            animation: flashEffect 6s infinite;
         }
 
         .card:hover {
@@ -107,23 +101,11 @@ if (isset($_GET['logout'])) {
         .card a:hover {
             color: #0056b3;
         }
-
-        /* Animation pour l'effet de disparition et réapparition */
-        @keyframes flashEffect {
-            0%, 100% {
-                opacity: 1;
-                transform: scale(1);
-            }
-            25%, 75% {
-                opacity: 0.8;
-                transform: scale(0.95);
-            }
-        }
     </style>
 </head>
 <body>
     <div class="logout">
-        <a href="dashboard.php?logout=true">Déconnexion</a>
+        <a href="logout.php">Déconnexion</a>
     </div>
     <h1>PARFUME DE FRANCE</h1>
     <h3>Bienvenue sur le Tableau de Bord</h3>
